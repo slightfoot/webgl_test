@@ -8,6 +8,16 @@ html, body {
   font-family: 'Roboto', sans-serif;
 }
 
+#options {
+  width: 300px;
+  background-color: rgba(0, 0, 0, 0.2);
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 15px;
+  display: none;
+}
+
 #output {
   width: 100%;
   height: 100%;

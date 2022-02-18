@@ -65,9 +65,9 @@ abstract class BaseWebGL {
     }
   }
 
-  void freeVertexAttributes(int attribs) {
-    for (int i = 0; i < attribs; i++) {
-      gl.disableVertexAttribArray(i);
+  void freeVertexAttributes(List<int> attribs) {
+    for (var attr in attribs) {
+      gl.disableVertexAttribArray(attr);
     }
   }
 
