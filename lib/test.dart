@@ -7,15 +7,12 @@ import 'package:vector_math/vector_math.dart';
 import 'package:webgltest/base.dart';
 
 class TestWebGL extends BaseWebGL {
-  late webgl.Shader _vs;
-  late webgl.Shader _fs;
   late webgl.Program _shaderProgram;
-
   late webgl.Buffer _cubeVertexPositionBuffer;
   late webgl.Buffer _cubeVertexTextureCoordBuffer;
   late webgl.Buffer _cubeVertexIndexBuffer;
 
-  late webgl.Texture _neheTexture;
+  late final List<webgl.Texture> _textures;
 
   final _pMatrix = Matrix4.identity();
   final _mvMatrix = Matrix4.identity();
@@ -26,14 +23,33 @@ class TestWebGL extends BaseWebGL {
   late webgl.UniformLocation _uMVMatrix;
   late webgl.UniformLocation _samplerUniform;
 
-  double _xRot = 0.0;
-  double _yRot = 0.0;
-  double _zRot = 0.0;
+  double _xRot = 0.0, _xSpeed = 0.0, _yRot = 0.0, _ySpeed = 0.0, _zPos = -5.0;
+  int _filter = 0;
+
+  final _currentlyPressedKeys = List.filled(128, false);
 
   TestWebGL(CanvasElement elm) {
     gl = elm.getContext('webgl') as webgl.RenderingContext;
     gl.clearColor(1, 1, 1, 1.0);
     gl.enable(webgl.WebGL.DEPTH_TEST);
+
+    document.onKeyDown.listen(_handleKeyDown);
+    document.onKeyUp.listen(_handleKeyUp);
+  }
+
+  void _handleKeyDown(KeyboardEvent event) {
+    if ("F".codeUnitAt(0) == event.keyCode) {
+      _filter++;
+      if (_filter == 3) {
+        _filter = 0;
+      }
+    } else {
+      _currentlyPressedKeys[event.keyCode] = true;
+    }
+  }
+
+  void _handleKeyUp(KeyboardEvent event) {
+    _currentlyPressedKeys[event.keyCode] = false;
   }
 
   Future<void> init() async {
@@ -73,19 +89,19 @@ class TestWebGL extends BaseWebGL {
     """;
 
     // vertex shader compilation
-    _vs = gl.createShader(webgl.WebGL.VERTEX_SHADER);
-    gl.shaderSource(_vs, vsSource);
-    gl.compileShader(_vs);
+    final vs = gl.createShader(webgl.WebGL.VERTEX_SHADER);
+    gl.shaderSource(vs, vsSource);
+    gl.compileShader(vs);
 
     // fragment shader compilation
-    _fs = gl.createShader(webgl.WebGL.FRAGMENT_SHADER);
-    gl.shaderSource(_fs, fsSource);
-    gl.compileShader(_fs);
+    final fs = gl.createShader(webgl.WebGL.FRAGMENT_SHADER);
+    gl.shaderSource(fs, fsSource);
+    gl.compileShader(fs);
 
     // attach shaders to a WebGL program
     _shaderProgram = gl.createProgram();
-    gl.attachShader(_shaderProgram, _vs);
-    gl.attachShader(_shaderProgram, _fs);
+    gl.attachShader(_shaderProgram, vs);
+    gl.attachShader(_shaderProgram, fs);
     gl.linkProgram(_shaderProgram);
     gl.useProgram(_shaderProgram);
 
@@ -93,12 +109,12 @@ class TestWebGL extends BaseWebGL {
      * Check if shaders were compiled properly. This is probably the most painful part
      * since there's no way to "debug" shader compilation
      */
-    if (!(gl.getShaderParameter(_vs, webgl.WebGL.COMPILE_STATUS) as bool)) {
-      print(gl.getShaderInfoLog(_vs));
+    if (!(gl.getShaderParameter(vs, webgl.WebGL.COMPILE_STATUS) as bool)) {
+      print(gl.getShaderInfoLog(vs));
     }
 
-    if (!(gl.getShaderParameter(_fs, webgl.WebGL.COMPILE_STATUS) as bool)) {
-      print(gl.getShaderInfoLog(_fs));
+    if (!(gl.getShaderParameter(fs, webgl.WebGL.COMPILE_STATUS) as bool)) {
+      print(gl.getShaderInfoLog(fs));
     }
 
     if (!(gl.getProgramParameter(_shaderProgram, webgl.WebGL.LINK_STATUS) as bool)) {
@@ -221,25 +237,42 @@ class TestWebGL extends BaseWebGL {
 
   Future<void> _initTexture() async {
     final textureLoaded = Completer<void>();
-    _neheTexture = gl.createTexture();
+
+    _textures = List.generate(3, (index) => gl.createTexture());
     final image = Element.tag('img') as ImageElement;
     image.onLoad.listen((e) {
-      _handleLoadedTexture(_neheTexture, image);
+      _handleLoadedTexture(_textures, image);
       textureLoaded.complete();
     });
-    image.src = "images/nehe.gif";
+    image.src = "images/crate.gif";
     return textureLoaded.future;
   }
 
-  void _handleLoadedTexture(webgl.Texture texture, ImageElement img) {
-    gl.bindTexture(webgl.WebGL.TEXTURE_2D, texture);
-    gl.pixelStorei(webgl.WebGL.UNPACK_FLIP_Y_WEBGL, 1); // second argument must be an int
+  void _handleLoadedTexture(List<webgl.Texture> textures, ImageElement img) {
+    gl.pixelStorei(
+        webgl.WebGL.UNPACK_FLIP_Y_WEBGL, 1); // second argument must be an int (no boolean)
+
+    gl.bindTexture(webgl.WebGL.TEXTURE_2D, textures[0]);
     gl.texImage2D(webgl.WebGL.TEXTURE_2D, 0, webgl.WebGL.RGBA, webgl.WebGL.RGBA,
         webgl.WebGL.UNSIGNED_BYTE, img);
     gl.texParameteri(webgl.WebGL.TEXTURE_2D, webgl.WebGL.TEXTURE_MAG_FILTER, webgl.WebGL.NEAREST);
     gl.texParameteri(webgl.WebGL.TEXTURE_2D, webgl.WebGL.TEXTURE_MIN_FILTER, webgl.WebGL.NEAREST);
+
+    gl.bindTexture(webgl.WebGL.TEXTURE_2D, textures[1]);
+    gl.texImage2D(webgl.WebGL.TEXTURE_2D, 0, webgl.WebGL.RGBA, webgl.WebGL.RGBA,
+        webgl.WebGL.UNSIGNED_BYTE, img);
+    gl.texParameteri(webgl.WebGL.TEXTURE_2D, webgl.WebGL.TEXTURE_MAG_FILTER, webgl.WebGL.LINEAR);
+    gl.texParameteri(webgl.WebGL.TEXTURE_2D, webgl.WebGL.TEXTURE_MIN_FILTER, webgl.WebGL.LINEAR);
+
+    gl.bindTexture(webgl.WebGL.TEXTURE_2D, textures[2]);
+    gl.texImage2D(webgl.WebGL.TEXTURE_2D, 0, webgl.WebGL.RGBA, webgl.WebGL.RGBA,
+        webgl.WebGL.UNSIGNED_BYTE, img);
+    gl.texParameteri(webgl.WebGL.TEXTURE_2D, webgl.WebGL.TEXTURE_MAG_FILTER, webgl.WebGL.LINEAR);
+    gl.texParameteri(
+        webgl.WebGL.TEXTURE_2D, webgl.WebGL.TEXTURE_MIN_FILTER, webgl.WebGL.LINEAR_MIPMAP_NEAREST);
+    gl.generateMipmap(webgl.WebGL.TEXTURE_2D);
+
     gl.bindTexture(webgl.WebGL.TEXTURE_2D, null);
-    gl.uniform1i(_samplerUniform, 0);
   }
 
   void _updateMatrixUniforms() {
@@ -269,11 +302,10 @@ class TestWebGL extends BaseWebGL {
     gl.clear(webgl.WebGL.COLOR_BUFFER_BIT | webgl.WebGL.DEPTH_BUFFER_BIT);
 
     _mvMatrix.setIdentity();
-    _mvMatrix.translate(Vector3(0.0, 0.0, -5.0));
+    _mvMatrix.translate(Vector3(0.0, 0.0, _zPos));
 
     _mvMatrix.rotate(Vector3(1.0, 0.0, 0.0), radians(_xRot));
     _mvMatrix.rotate(Vector3(0.0, 1.0, 0.0), radians(_yRot));
-    _mvMatrix.rotate(Vector3(0.0, 0.0, 1.0), radians(_zRot));
 
     // vertices
     gl.bindBuffer(webgl.WebGL.ARRAY_BUFFER, _cubeVertexPositionBuffer);
@@ -284,7 +316,8 @@ class TestWebGL extends BaseWebGL {
     gl.vertexAttribPointer(_aTextureCoord, 2, webgl.WebGL.FLOAT, false, 0, 0);
 
     gl.activeTexture(webgl.WebGL.TEXTURE0);
-    gl.bindTexture(webgl.WebGL.TEXTURE_2D, _neheTexture);
+    gl.bindTexture(webgl.WebGL.TEXTURE_2D, _textures[_filter]);
+    gl.uniform1i(_samplerUniform, 0);
 
     gl.bindBuffer(webgl.WebGL.ELEMENT_ARRAY_BUFFER, _cubeVertexIndexBuffer);
     _updateMatrixUniforms();
@@ -292,12 +325,39 @@ class TestWebGL extends BaseWebGL {
 
     // rotate
     _animate(time);
+    _handleKeys();
   }
 
   void _animate(double time) {
-    _xRot += (90 * time) / 1000.0;
-    _yRot += (90 * time) / 1000.0;
-    _zRot += (90 * time) / 1000.0;
+    _xRot += (_xSpeed * time) / 1000.0;
+    _yRot += (_ySpeed * time) / 1000.0;
+  }
+
+  void _handleKeys() {
+    // Page Up
+    if (_currentlyPressedKeys.elementAt(33)) {
+      _zPos -= 0.05;
+    }
+    // Page Down
+    if (_currentlyPressedKeys.elementAt(34)) {
+      _zPos += 0.05;
+    }
+    // Left cursor key
+    if (_currentlyPressedKeys.elementAt(37)) {
+      _ySpeed -= 1;
+    }
+    // Right cursor key
+    if (_currentlyPressedKeys.elementAt(39)) {
+      _ySpeed += 1;
+    }
+    // Up cursor key
+    if (_currentlyPressedKeys.elementAt(38)) {
+      _xSpeed -= 1;
+    }
+    // Down cursor key
+    if (_currentlyPressedKeys.elementAt(40)) {
+      _xSpeed += 1;
+    }
   }
 
   @override
@@ -308,7 +368,7 @@ class TestWebGL extends BaseWebGL {
       _cubeVertexIndexBuffer,
     ]);
     freePrograms([_shaderProgram]);
-    freeTextures([_neheTexture]);
+    freeTextures(_textures);
     freeVertexAttributes(2);
     super.shutdown();
   }
